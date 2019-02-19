@@ -6,6 +6,19 @@ mod tests {
     use linked_hash_map::LinkedHashMap;
 
     #[test]
+    fn iter() {
+        let mut map = LinkedHashMap::new();
+        map.insert("a", 1);
+        map.insert("b", 2);
+        map.insert("c", 3);
+
+        let mut iter = map.iter();
+        assert_eq!(iter.next(), Some((&"a", &1)));
+        assert_eq!(iter.next(), Some((&"b", &2)));
+        assert_eq!(iter.next(), Some((&"c", &3)));
+    }
+
+    #[test]
     fn len() {
         let mut a = LinkedHashMap::new();
         assert_eq!(a.len(), 0);

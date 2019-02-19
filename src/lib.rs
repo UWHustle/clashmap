@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::borrow::Borrow;
 use std::mem;
 use std::ops::Index;
+use std::marker::PhantomData;
 
 struct Node<K, V> {
     key: K,
@@ -65,6 +66,14 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
         }
     }
 
+    pub fn iter(&self) -> Iter<K, V> {
+        Iter {
+            head: self.head,
+            remaining: self.len(),
+            marker: PhantomData
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.hash_set.len()
     }
@@ -96,6 +105,7 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
             unsafe {
                 node.prev = self.tail;
                 (*self.tail).next = raw_node;
+                self.tail = raw_node
             };
         }
         self.hash_set.replace(node).map(|node| node.value)
@@ -135,5 +145,28 @@ impl<'a, K, V, Q: ?Sized> Index<&'a Q> for LinkedHashMap<K, V>
 
     fn index(&self, key: &Q) -> &V {
         self.get(key).expect("no entry found for key")
+    }
+}
+
+pub struct Iter<'a, K: 'a, V: 'a> {
+    head: *const Node<K, V>,
+    remaining: usize,
+    marker: PhantomData<(&'a K, &'a V)>
+}
+
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<(&'a K, &'a V)> {
+        if self.head.is_null() {
+            None
+        } else {
+            self.remaining -= 1;
+            unsafe {
+                let result = Some((&(*self.head).key, &(*self.head).value));
+                self.head = (*self.head).next;
+                result
+            }
+        }
     }
 }
