@@ -3,6 +3,7 @@ use std::ptr;
 use std::hash::{Hash, Hasher};
 use std::borrow::Borrow;
 use std::mem;
+use std::ops::Index;
 
 struct Node<K, V> {
     key: K,
@@ -14,6 +15,7 @@ struct Node<K, V> {
 pub struct LinkedHashMap<K, V> {
     hash_set: HashSet<Box<Node<K, V>>>,
     head: *mut Node<K, V>,
+    tail: *mut Node<K, V>
 }
 
 impl<K: Hash, V> Hash for Node<K, V> {
@@ -58,8 +60,19 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
     pub fn new() -> Self {
         LinkedHashMap {
             hash_set: HashSet::new(),
-            head: ptr::null_mut()
+            head: ptr::null_mut(),
+            tail: ptr::null_mut()
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hash_set.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.hash_set.clear();
+        self.head = ptr::null_mut();
+        self.tail = ptr::null_mut();
     }
 
     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
@@ -69,21 +82,54 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
         self.hash_set.get(Key::from_ref(k)).map(|node| &node.value)
     }
 
-    pub fn insert(&mut self, k: K, v: V) {
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         let mut node = Box::new(Node::new(k, v));
         let raw_node: *mut _ = &mut *node;
-        if self.head.is_null() {
-            node.next = raw_node;
-            node.prev = raw_node;
+        if self.tail.is_null() {
             self.head = raw_node;
+            self.tail = raw_node;
         } else {
             unsafe {
-                node.next = self.head;
-                node.prev = (*self.head).prev;
-                (*self.head).prev = raw_node;
-                (*(*node).prev).next = raw_node;
+                node.prev = self.tail;
+                (*self.tail).next = raw_node;
             };
         }
-        self.hash_set.insert( node );
+        self.hash_set.replace(node).map(|node| node.value)
+    }
+
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+        where K: Borrow<Q>,
+              Q: Eq + Hash
+    {
+        self.hash_set.take(Key::from_ref(k)).map(|node| {
+            if node.prev.is_null() {
+                self.head = node.next
+            } else {
+                unsafe {
+                    (*node.prev).next = node.next
+                }
+            }
+
+            if node.next.is_null() {
+                self.tail = node.prev
+            } else {
+                unsafe {
+                    (*node.next).prev = node.prev
+                }
+            }
+
+            node.value
+        })
+    }
+}
+
+impl<'a, K, V, Q: ?Sized> Index<&'a Q> for LinkedHashMap<K, V>
+    where K: Eq + Hash + Borrow<Q>,
+          Q: Eq + Hash
+{
+    type Output = V;
+
+    fn index(&self, key: &Q) -> &V {
+        self.get(key).expect("no entry found for key")
     }
 }
