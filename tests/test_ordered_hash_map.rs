@@ -1,13 +1,13 @@
-extern crate linked_hash_map;
+extern crate ordered_hash_map;
 
 #[cfg(test)]
 mod tests {
 
-    use linked_hash_map::LinkedHashMap;
+    use ordered_hash_map::OrderedHashMap;
 
     #[test]
     fn iter() {
-        let mut map = LinkedHashMap::new();
+        let mut map = OrderedHashMap::new();
         map.insert("a", 1);
         map.insert("b", 2);
         map.insert("c", 3);
@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn len() {
-        let mut a = LinkedHashMap::new();
+        let mut a = OrderedHashMap::new();
         assert_eq!(a.len(), 0);
         a.insert(1, "a");
         assert_eq!(a.len(), 1);
@@ -28,7 +28,7 @@ mod tests {
 
     #[test]
     fn is_empty() {
-        let mut a = LinkedHashMap::new();
+        let mut a = OrderedHashMap::new();
         assert!(a.is_empty());
         a.insert(1, "a");
         assert!(!a.is_empty());
@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn clear() {
-        let mut a = LinkedHashMap::new();
+        let mut a = OrderedHashMap::new();
         a.insert(1, "a");
         a.clear();
         assert!(a.is_empty());
@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn get() {
-        let mut map = LinkedHashMap::new();
+        let mut map = OrderedHashMap::new();
         map.insert(1, "a");
         assert_eq!(map.get(&1), Some(&"a"));
         assert_eq!(map.get(&2), None);
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn insert() {
-        let mut map = LinkedHashMap::new();
+        let mut map = OrderedHashMap::new();
         assert_eq!(map.insert(37, "a"), None);
         assert_eq!(map.is_empty(), false);
 
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn remove() {
-        let mut map = LinkedHashMap::new();
+        let mut map = OrderedHashMap::new();
         map.insert(1, "a");
         assert_eq!(map.remove(&1), Some("a"));
         assert_eq!(map.remove(&1), None);

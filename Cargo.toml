@@ -1,5 +1,5 @@
 [package]
-name = "linked_hash_map"
+name = "ordered_hash_map"
 version = "0.1.0"
 authors = ["gaffneyk <kgaff33@gmail.com>"]
 edition = "2018"
