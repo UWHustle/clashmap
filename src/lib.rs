@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::ptr;
 use std::hash::{Hash, Hasher};
 use std::borrow::Borrow;
+use std::mem;
 
 struct NodeRef<K, V> {
     node: Box<Node<K, V>>
@@ -33,9 +34,16 @@ impl<K: PartialEq, V> PartialEq for NodeRef<K, V> {
 
 impl<K: Eq, V> Eq for NodeRef<K, V> {}
 
-impl<K, V> Borrow<K> for NodeRef<K, V> {
-    fn borrow(&self) -> &K {
-        &self.node.key
+#[derive(Hash, PartialEq, Eq)]
+struct Qey<Q: ?Sized>(Q);
+
+impl<Q: ?Sized> Qey<Q> {
+    fn from_ref(q: &Q) -> &Self { unsafe { mem::transmute(q) } }
+}
+
+impl<K, V, Q: ?Sized> Borrow<Qey<Q>> for NodeRef<K, V> where K: Borrow<Q> {
+    fn borrow(&self) -> &Qey<Q> {
+        Qey::from_ref(self.node.key.borrow() )
     }
 }
 
@@ -58,11 +66,11 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
         }
     }
 
-    pub fn get(&self, k: &K) -> Option<&V>
-//        where K: Borrow<Q>,
-//              Q: Eq + Hash
+    pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+        where K: Borrow<Q>,
+              Q: Eq + Hash
     {
-        self.hash_set.get(k).map(|node| &(*node).node.value)
+        self.hash_set.get(Qey::from_ref(k)).map(|node| &node.node.value)
     }
 
     pub fn insert(&mut self, k: K, v: V) {

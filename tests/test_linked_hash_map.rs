@@ -14,8 +14,8 @@ mod tests {
     #[test]
     fn insert_get() {
         let mut map = LinkedHashMap::new();
-        map.insert(1, "a");
-        assert_eq!(map.get(&1), Some(&"a"));
-        assert_eq!(map.get(&2), None);
+        map.insert("key".to_string(), "a");
+        assert_eq!(map.get("key"), Some(&"a"));
+        assert_eq!(map.get("nonexistent_key"), None);
     }
 }
