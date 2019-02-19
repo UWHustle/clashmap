@@ -6,6 +6,14 @@ mod tests {
     use linked_hash_map::LinkedHashMap;
 
     #[test]
+    fn len() {
+        let mut a = LinkedHashMap::new();
+        assert_eq!(a.len(), 0);
+        a.insert(1, "a");
+        assert_eq!(a.len(), 1);
+    }
+
+    #[test]
     fn is_empty() {
         let mut a = LinkedHashMap::new();
         assert!(a.is_empty());
@@ -14,14 +22,11 @@ mod tests {
     }
 
     #[test]
-    fn insert() {
-        let mut map = LinkedHashMap::new();
-        assert_eq!(map.insert(37, "a"), None);
-        assert_eq!(map.is_empty(), false);
-
-        map.insert(37, "b");
-        assert_eq!(map.insert(37, "c"), Some("b"));
-        assert_eq!(map[&37], "c");
+    fn clear() {
+        let mut a = LinkedHashMap::new();
+        a.insert(1, "a");
+        a.clear();
+        assert!(a.is_empty());
     }
 
     #[test]
@@ -33,11 +38,14 @@ mod tests {
     }
 
     #[test]
-    fn clear() {
-        let mut a = LinkedHashMap::new();
-        a.insert(1, "a");
-        a.clear();
-        assert!(a.is_empty());
+    fn insert() {
+        let mut map = LinkedHashMap::new();
+        assert_eq!(map.insert(37, "a"), None);
+        assert_eq!(map.is_empty(), false);
+
+        map.insert(37, "b");
+        assert_eq!(map.insert(37, "c"), Some("b"));
+        assert_eq!(map[&37], "c");
     }
 
     #[test]

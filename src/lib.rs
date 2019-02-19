@@ -65,6 +65,10 @@ impl<K: Hash + Eq, V> LinkedHashMap<K, V> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.hash_set.len()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.hash_set.is_empty()
     }
