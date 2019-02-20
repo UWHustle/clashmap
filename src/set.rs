@@ -1,6 +1,7 @@
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::collections::hash_map::RandomState;
-use std::sync::Mutex;
+use std::sync::{Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const MIN_CAPACITY: usize = 2^4;
 
@@ -19,7 +20,7 @@ impl<T> Bucket<T> {
 pub struct ConcurrentHashSet<T> {
     hash_builder: RandomState,
     capacity: usize,
-    size: usize,
+    size: AtomicUsize,
     buckets: Vec<Bucket<T>>
 }
 
@@ -28,13 +29,13 @@ impl<T> ConcurrentHashSet<T> {
         ConcurrentHashSet {
             hash_builder: RandomState::new(),
             capacity: MIN_CAPACITY,
-            size: 0,
+            size: AtomicUsize::new(0),
             buckets: (0..MIN_CAPACITY).map(|_| Bucket::new()).collect()
         }
     }
 
     pub fn len(&self) -> usize {
-        self.size
+        self.size.load(Ordering::Relaxed)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -48,7 +49,8 @@ impl<T> ConcurrentHashSet<T> {
         for i in 0..self.buckets.len() {
             let mut value_guard = self.buckets[(hash + i) % self.buckets.len()].value.lock().unwrap();
             if value_guard.is_none() || (*value_guard).as_ref().unwrap().eq(&value) {
-                return (*value_guard).replace(value)
+                let existing_value = (*value_guard).replace(value);
+                self.size += 1;
             }
         }
         None
