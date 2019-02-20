@@ -13,7 +13,7 @@ struct Node<K, V> {
     prev: *mut Node<K, V>
 }
 
-pub struct OrderedHashMap<K, V> {
+pub struct ClashMap<K, V> {
     hash_set: HashSet<Box<Node<K, V>>>,
     head: *mut Node<K, V>,
     tail: *mut Node<K, V>
@@ -57,9 +57,9 @@ impl<K, V> Node<K, V> {
     }
 }
 
-impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
+impl<K: Hash + Eq, V> ClashMap<K, V> {
     pub fn new() -> Self {
-        OrderedHashMap {
+        ClashMap {
             hash_set: HashSet::new(),
             head: ptr::null_mut(),
             tail: ptr::null_mut()
@@ -137,7 +137,7 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
     }
 }
 
-impl<'a, K, V, Q: ?Sized> Index<&'a Q> for OrderedHashMap<K, V>
+impl<'a, K, V, Q: ?Sized> Index<&'a Q> for ClashMap<K, V>
     where K: Eq + Hash + Borrow<Q>,
           Q: Eq + Hash
 {
