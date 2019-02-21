@@ -1,14 +1,21 @@
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::collections::hash_map::RandomState;
-use std::sync::{RwLock, RwLockWriteGuard, atomic::{AtomicUsize, Ordering}};
+use std::sync::{RwLock, atomic::{AtomicUsize, Ordering}};
 use std::mem;
 use std::borrow::Borrow;
 use std::sync::RwLockReadGuard;
+use owning_ref::OwningRef;
+use owning_ref::OwningHandle;
+use std::ops::Deref;
 
 const MAX_LOAD_NUM: usize = 1;
 const MAX_LOAD_DEN: usize = 2;
 
-struct Bucket<T> {
+pub struct ValueGuard<'a, T: 'a> {
+    value: OwningRef<OwningHandle<RwLockReadGuard<'a, Table<T>>, RwLockReadGuard<'a, Bucket<T>>>, T>
+}
+
+pub struct Bucket<T> {
     value: Option<T>
 }
 
@@ -21,6 +28,22 @@ pub struct ConcurrentHashSet<T> {
     table: RwLock<Table<T>>,
     size: AtomicUsize,
 }
+
+impl<'a, T> Deref for ValueGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<'a, T: PartialEq> PartialEq for ValueGuard<'a, T> {
+    fn eq(&self, other: &ValueGuard<'a, T>) -> bool {
+        self == other
+    }
+}
+
+impl<'a, T: Eq> Eq for ValueGuard<'a, T> {}
 
 impl<T> Bucket<T> {
     fn new() -> Self {
@@ -40,7 +63,7 @@ impl<T> Table<T> {
 
     fn find<Q: ?Sized>(&self, value: &Q) -> &RwLock<Bucket<T>>
         where T: Borrow<Q> + PartialEq<Q>,
-              Q: Hash
+              Q: Hash + Eq
     {
         let hash = self.hash(value);
         let mut i = hash % self.buckets.len();
@@ -64,7 +87,9 @@ impl<T> Table<T> {
     }
 }
 
-impl<T> ConcurrentHashSet<T> {
+impl<T> ConcurrentHashSet<T>
+    where T: Eq + Hash
+{
     pub fn new() -> Self {
         Self::with_capacity(0)
     }
@@ -80,9 +105,7 @@ impl<T> ConcurrentHashSet<T> {
         self.table.read().unwrap().buckets.len() * MAX_LOAD_NUM / MAX_LOAD_DEN
     }
 
-    pub fn reserve(&self, additional: usize)
-        where T: Hash + PartialEq
-    {
+    pub fn reserve(&self, additional: usize) {
         if self.capacity() - self.len() < additional {
             let raw_capacity = (self.len() + additional) * MAX_LOAD_DEN / MAX_LOAD_NUM;
             self.resize(raw_capacity);
@@ -97,12 +120,42 @@ impl<T> ConcurrentHashSet<T> {
         self.len() == 0
     }
 
-//    pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<&T>
-//        where T: Borrow<Q> + PartialEq<Q>,
-//              Q: Hash
-//    {
-//        self.table.read().unwrap().find(value).read().unwrap().
-//    }
+    pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<ValueGuard<T>>
+        where T: Borrow<Q> + PartialEq<Q>,
+              Q: Hash + Eq
+    {
+//        if let Some(value) = OwningRef::new(
+//            OwningHandle::new_with_fn(self.table.read().unwrap(), |t| unsafe { &*t }.find(value)))
+//            .map(|b| &b.value) {
+//            ValueGuard { value }
+//        } else {
+//            None
+//        }
+        let bucket_handle = OwningHandle::new_with_fn(
+            self.table.read().unwrap(),
+            |t| unsafe {&*t}.find(value).read().unwrap());
+
+        match (*bucket_handle).value {
+            Some(_) => Some(ValueGuard { value: OwningRef::new(bucket_handle).map(|b| b.value.as_ref().unwrap()) }),
+            None => None
+        }
+
+//        let value_handle = OwningHandle::new_with_fn(
+//            bucket_handle,
+//            |b| unsafe {&*b}.value.as_ref());
+
+//        match *value_ref {
+//            Some(value) => Some(ValueGuard { value: value_ref.map(|v| &v.unwrap()) }),
+//            None => None
+//        };
+
+//
+//        let value_handle = OwningHandle::new_with_fn(
+//            self.table.read().unwrap(),
+//          |t| RwLockReadGuardRef::new(unsafe {&*t}.find(value).read().unwrap())
+//              .map(|b| &b.value));
+//        value_handle.deref().as_ref()
+    }
 
     pub fn insert(&self, value: T) -> bool
         where T: Hash + Eq
