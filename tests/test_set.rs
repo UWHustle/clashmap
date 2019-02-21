@@ -5,7 +5,7 @@ mod set_tests {
 
     #[test]
     fn test_insert() {
-        let mut set = ConcurrentHashSet::new();
+        let set = ConcurrentHashSet::new();
         set.replace("value".to_string());
     }
 }
