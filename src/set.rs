@@ -3,7 +3,6 @@ use std::collections::hash_map::RandomState;
 use std::sync::{RwLock, RwLockWriteGuard, atomic::{AtomicUsize, Ordering}};
 use std::mem;
 
-const MIN_CAPACITY: usize = 2^4;
 const MAX_LOAD_NUM: usize = 1;
 const MAX_LOAD_DEN: usize = 2;
 
@@ -62,12 +61,12 @@ impl<T> Table<T> {
 
 impl<T> ConcurrentHashSet<T> {
     pub fn new() -> Self {
-        Self::with_capacity(MIN_CAPACITY)
+        Self::with_capacity(0)
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
         ConcurrentHashSet {
-            table: RwLock::new(Table::with_capacity(capacity)),
+            table: RwLock::new(Table::with_capacity(capacity * MAX_LOAD_DEN / MAX_LOAD_NUM)),
             size: AtomicUsize::new(0)
         }
     }
@@ -93,6 +92,12 @@ impl<T> ConcurrentHashSet<T> {
         self.len() == 0
     }
 
+    pub fn insert(&self, value: T) -> bool
+        where T: Hash + Eq
+    {
+        self.replace(value).is_none()
+    }
+
     pub fn replace(&self, value: T) -> Option<T>
         where T: Hash + Eq
     {
@@ -100,7 +105,7 @@ impl<T> ConcurrentHashSet<T> {
         let table_guard = self.table.read().unwrap();
         let mut bucket_guard = table_guard.find_mut(&value);
         let replaced_value = bucket_guard.value.replace(value);
-        if replaced_value.is_some() {
+        if replaced_value.is_none() {
             self.size.fetch_add(1, Ordering::Relaxed);
         }
         replaced_value
