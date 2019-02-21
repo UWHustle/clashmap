@@ -1,10 +1,6 @@
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::collections::hash_map::RandomState;
-use std::sync::{Mutex, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::MutexGuard;
-use std::sync::RwLockWriteGuard;
-use std::f32::MIN;
+use std::sync::{RwLock, RwLockWriteGuard, atomic::{AtomicUsize, Ordering}};
 use std::mem;
 
 const MIN_CAPACITY: usize = 2^4;
@@ -119,14 +115,5 @@ impl<T> ConcurrentHashSet<T> {
                 }
             }
         }
-
-//        if self.buckets.len() < new_raw_capacity {
-//            let new_buckets = (0..new_raw_capacity).map(|_| Bucket::new()).collect();
-//            for bucket in self.buckets {
-//                if let Some(value) = *bucket.value.lock().unwrap() {
-//
-//                }
-//            }
-//        }
     }
 }
