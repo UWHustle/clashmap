@@ -62,8 +62,12 @@ impl<T> Table<T> {
 
 impl<T> ConcurrentHashSet<T> {
     pub fn new() -> Self {
+        Self::with_capacity(MIN_CAPACITY)
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
         ConcurrentHashSet {
-            table: RwLock::new(Table::with_capacity(MIN_CAPACITY)),
+            table: RwLock::new(Table::with_capacity(capacity)),
             size: AtomicUsize::new(0)
         }
     }
