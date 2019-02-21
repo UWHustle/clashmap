@@ -12,6 +12,16 @@ struct Bucket<T> {
     pub value: Mutex<Option<T>>
 }
 
+struct Table<T> {
+    hash_builder: RandomState,
+    buckets: Vec<Bucket<T>>
+}
+
+pub struct ConcurrentHashSet<T> {
+    table: RwLock<Table<T>>,
+    size: AtomicUsize,
+}
+
 impl<T> Bucket<T> {
     pub fn new() -> Self {
         Bucket {
@@ -20,32 +30,53 @@ impl<T> Bucket<T> {
     }
 }
 
-pub struct ConcurrentHashSet<T> {
-    hash_builder: RandomState,
-    size: AtomicUsize,
-    raw_capacity: AtomicUsize,
-    buckets: RwLock<Vec<Bucket<T>>>
+impl<T> Table<T> {
+    pub fn new() -> Self {
+        Table {
+            hash_builder: RandomState::new(),
+            buckets: (0..MIN_CAPACITY).map(|_| Bucket::new()).collect()
+        }
+    }
+
+    pub fn find(&self, value: &T) -> MutexGuard<Option<T>>
+        where T: Hash + Eq
+    {
+        let hash = self.hash(value);
+        let mut i = hash % self.buckets.len();
+        loop {
+            let value_guard = self.buckets[i].value.lock().unwrap();
+            if (*value_guard).is_none() || (*value_guard).as_ref().unwrap() == value {
+                break value_guard;
+            }
+            i = (i + 1) % self.buckets.len();
+        }
+    }
+
+    fn hash(&self, value: &T) -> usize
+        where T: Hash
+    {
+        let mut state = self.hash_builder.build_hasher();
+        value.hash(&mut state);
+        state.finish() as usize
+    }
 }
 
 impl<T> ConcurrentHashSet<T> {
     pub fn new() -> Self {
         ConcurrentHashSet {
-            hash_builder: RandomState::new(),
-            size: AtomicUsize::new(0),
-            raw_capacity: AtomicUsize::new(MIN_CAPACITY),
-            buckets: RwLock::new((0..MIN_CAPACITY).map(|_| Bucket::new()).collect())
+            table: RwLock::new(Table::new()),
+            size: AtomicUsize::new(0)
         }
     }
 
     pub fn capacity(&self) -> usize {
-        self.raw_capacity.load(Ordering::Relaxed) * MAX_LOAD_NUM / MAX_LOAD_DEN
+        self.table.read().unwrap().buckets.len() * MAX_LOAD_NUM / MAX_LOAD_DEN
     }
 
     pub fn reserve(&self, additional: usize) {
-        let remaining = self.capacity() - self.len();
-        if remaining < additional {
-            let min_capacity = self.len() + additional;
-            let raw_capacity = MAX_LOAD_DEN * min_capacity / MAX_LOAD_NUM;
+        if self.capacity() - self.len() < additional {
+            let raw_capacity = (self.len() + additional) * MAX_LOAD_DEN / MAX_LOAD_NUM;
+            self.resize(raw_capacity);
         }
     }
 
@@ -60,20 +91,9 @@ impl<T> ConcurrentHashSet<T> {
     pub fn replace(&self, value: T) -> Option<T>
         where T: Hash + Eq
     {
-        let hash = self.hash(&value);
         self.reserve(1);
-
-        let buckets_guard = self.buckets.read().unwrap();
-        let mut i = hash % buckets_guard.len();
-
-        let mut value_guard = loop {
-            let value_guard = buckets_guard[i].value.lock().unwrap();
-            if (*value_guard).is_none() || (*value_guard).as_ref().unwrap() == &value {
-                break value_guard;
-            }
-            i = (i + 1) % buckets_guard.len();
-        };
-
+        let table_guard = self.table.read().unwrap();
+        let mut value_guard = table_guard.find(&value);
         let replaced_value = (*value_guard).replace(value);
         if replaced_value.is_some() {
             self.size.fetch_add(1, Ordering::Relaxed);
@@ -81,15 +101,15 @@ impl<T> ConcurrentHashSet<T> {
         replaced_value
     }
 
-    fn hash(&self, value: &T) -> usize
-        where T: Hash
-    {
-        let mut state = self.hash_builder.build_hasher();
-        value.hash(&mut state);
-        state.finish() as usize
-    }
-
-    fn resize(&self) {
-
+    fn resize(&self, new_raw_capacity: usize) {
+//        let mut buckets_guard = self.buckets.write().unwrap();
+//        if buckets_guard.len() < new_raw_capacity {
+////            let new_buckets = (0..new_raw_capacity).map(|_| Bucket::new()).collect();
+////            for bucket in *buckets_guard {
+////                if let Some(value) = *bucket.value.lock().unwrap() {
+////
+////                }
+////            }
+//        }
     }
 }
