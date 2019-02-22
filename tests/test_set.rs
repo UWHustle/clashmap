@@ -33,6 +33,14 @@ mod set_tests {
     }
 
     #[test]
+    fn clear() {
+        let v = ConcurrentHashSet::new();
+        v.insert(1);
+        v.clear();
+        assert!(v.is_empty());
+    }
+
+    #[test]
     fn insert() {
         let set = ConcurrentHashSet::new();
         assert_eq!(set.insert(2), true);
@@ -50,10 +58,18 @@ mod set_tests {
     }
 
     #[test]
-    fn clear() {
-        let v = ConcurrentHashSet::new();
-        v.insert(1);
-        v.clear();
-        assert!(v.is_empty());
+    fn remove() {
+        let set = ConcurrentHashSet::new();
+        set.insert(2);
+        assert_eq!(set.remove(&2), true);
+        assert_eq!(set.remove(&2), false);
+    }
+
+    #[test]
+    fn take() {
+        let set = ConcurrentHashSet::new();
+        set.insert(2);
+        assert_eq!(set.take(&2), Some(2));
+        assert_eq!(set.take(&2), None);
     }
 }

@@ -4,8 +4,7 @@ use std::sync::{RwLock, atomic::{AtomicUsize, Ordering}};
 use std::mem;
 use std::borrow::Borrow;
 use std::sync::RwLockReadGuard;
-use owning_ref::OwningRef;
-use owning_ref::OwningHandle;
+use owning_ref::{OwningHandle, OwningRef};
 use std::ops::Deref;
 
 const MAX_LOAD_NUM: usize = 1;
@@ -61,7 +60,7 @@ impl<T> Table<T> {
         }
     }
 
-    fn find<Q: ?Sized>(&self, value: &Q) -> &RwLock<Bucket<T>>
+    fn find<Q: ?Sized>(&self, value: &Q) -> (usize, &RwLock<Bucket<T>>)
         where T: Borrow<Q> + PartialEq<Q>,
               Q: Hash + Eq
     {
@@ -69,12 +68,34 @@ impl<T> Table<T> {
         let mut i = hash % self.buckets.len();
         loop {
             let bucket = &self.buckets[i];
-            let bucket_guard = bucket.read().unwrap();
+            let bucket_guard = self.buckets[i].read().unwrap();
             if bucket_guard.value.is_none() || bucket_guard.value.as_ref().unwrap() == value {
-                break bucket;
+                break (i, bucket);
             }
             i = (i + 1) % self.buckets.len();
         }
+    }
+
+    fn take_shift<Q: ?Sized>(&self, value: &Q) -> Option<T>
+        where T: Borrow<Q> + PartialEq<Q>,
+              Q: Hash + Eq
+    {
+        let (i, bucket_lock) = self.find(value);
+        let mut bucket_guard = bucket_lock.write().unwrap();
+
+
+        bucket_guard.value.take().map(|value| {
+            let mut swap_index = i;
+            while self.buckets[(swap_index + 1) % self.buckets.len()].read().unwrap().value.is_some() {
+                swap_index += 1;
+            }
+
+            if swap_index != i {
+                let mut swap_bucket_guard = self.buckets[swap_index % self.buckets.len()].write().unwrap();
+                mem::swap(&mut bucket_guard.value, &mut swap_bucket_guard.value);
+            }
+            value
+        })
     }
 
     fn hash<Q: ?Sized>(&self, value: &Q) -> usize
@@ -132,7 +153,7 @@ impl<T> ConcurrentHashSet<T>
     {
         let bucket_handle = OwningHandle::new_with_fn(
             self.table.read().unwrap(),
-            |t| unsafe {&*t}.find(value).read().unwrap());
+            |t| unsafe {&*t}.find(value).1.read().unwrap());
 
         match (*bucket_handle).value {
             Some(_) => Some(ValueGuard(OwningRef::new(bucket_handle).map(|b| b.value.as_ref().unwrap()))),
@@ -151,12 +172,26 @@ impl<T> ConcurrentHashSet<T>
     {
         self.reserve(1);
         let table_guard = self.table.read().unwrap();
-        let mut bucket_guard = table_guard.find(&value).write().unwrap();
+        let mut bucket_guard = table_guard.find(&value).1.write().unwrap();
         let replaced_value = bucket_guard.value.replace(value);
         if replaced_value.is_none() {
             self.size.fetch_add(1, Ordering::Relaxed);
         }
         replaced_value
+    }
+
+    pub fn remove<Q: ?Sized>(&self, value: &Q) -> bool
+        where T: Borrow<Q> + PartialEq<Q>,
+              Q: Hash + Eq
+    {
+        self.take(value).is_some()
+    }
+
+    pub fn take<Q: ?Sized>(&self, value: &Q) -> Option<T>
+        where T: Borrow<Q> + PartialEq<Q>,
+              Q: Hash + Eq
+    {
+        self.table.read().unwrap().take_shift(value)
     }
 
     fn resize(&self, new_raw_capacity: usize)
@@ -167,7 +202,7 @@ impl<T> ConcurrentHashSet<T>
             let old_table = mem::replace(&mut *table_guard, Table::with_capacity(new_raw_capacity));
             for bucket in old_table.buckets {
                 if let Some(value) = bucket.into_inner().unwrap().value {
-                    let mut bucket_guard = table_guard.find(&value).write().unwrap();
+                    let mut bucket_guard = table_guard.find(&value).1.write().unwrap();
                     bucket_guard.value.replace(value);
                 }
             }
