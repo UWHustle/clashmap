@@ -48,4 +48,12 @@ mod set_tests {
         set.replace(Vec::with_capacity(10));
         assert_eq!(set.get(&vec![]).unwrap().capacity(), 10);
     }
+
+    #[test]
+    fn clear() {
+        let v = ConcurrentHashSet::new();
+        v.insert(1);
+        v.clear();
+        assert!(v.is_empty());
+    }
 }

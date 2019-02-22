@@ -120,6 +120,12 @@ impl<T> ConcurrentHashSet<T>
         self.len() == 0
     }
 
+    pub fn clear(&self) {
+        let mut table_guard = self.table.write().unwrap();
+        mem::replace(&mut *table_guard, Table::with_capacity(0));
+        self.size.store(0, Ordering::Relaxed);
+    }
+
     pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<ValueGuard<T>>
         where T: Borrow<Q> + PartialEq<Q>,
               Q: Hash + Eq
