@@ -61,7 +61,7 @@ impl<T> Table<T> {
     }
 
     fn find<Q: ?Sized>(&self, value: &Q) -> (usize, &RwLock<Bucket<T>>)
-        where T: Borrow<Q> + PartialEq<Q>,
+        where T: Borrow<Q>,
               Q: Hash + Eq
     {
         let hash = self.hash(value);
@@ -69,7 +69,7 @@ impl<T> Table<T> {
         loop {
             let bucket = &self.buckets[i];
             let bucket_guard = self.buckets[i].read().unwrap();
-            if bucket_guard.value.is_none() || bucket_guard.value.as_ref().unwrap() == value {
+            if bucket_guard.value.is_none() || value.eq(bucket_guard.value.as_ref().unwrap().borrow()) {
                 break (i, bucket);
             }
             i = (i + 1) % self.buckets.len();
@@ -77,7 +77,7 @@ impl<T> Table<T> {
     }
 
     fn take_shift<Q: ?Sized>(&self, value: &Q) -> Option<T>
-        where T: Borrow<Q> + PartialEq<Q>,
+        where T: Borrow<Q>,
               Q: Hash + Eq
     {
         let (i, bucket_lock) = self.find(value);
@@ -148,7 +148,7 @@ impl<T> ConcurrentHashSet<T>
     }
 
     pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<ValueGuard<T>>
-        where T: Borrow<Q> + PartialEq<Q>,
+        where T: Borrow<Q>,
               Q: Hash + Eq
     {
         let bucket_handle = OwningHandle::new_with_fn(
@@ -181,21 +181,21 @@ impl<T> ConcurrentHashSet<T>
     }
 
     pub fn remove<Q: ?Sized>(&self, value: &Q) -> bool
-        where T: Borrow<Q> + PartialEq<Q>,
+        where T: Borrow<Q>,
               Q: Hash + Eq
     {
         self.take(value).is_some()
     }
 
     pub fn take<Q: ?Sized>(&self, value: &Q) -> Option<T>
-        where T: Borrow<Q> + PartialEq<Q>,
+        where T: Borrow<Q>,
               Q: Hash + Eq
     {
         self.table.read().unwrap().take_shift(value)
     }
 
     fn resize(&self, new_raw_capacity: usize)
-        where T: Hash + PartialEq
+        where T: Hash
     {
         let mut table_guard = self.table.write().unwrap();
         if table_guard.buckets.len() < new_raw_capacity {
