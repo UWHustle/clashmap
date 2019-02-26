@@ -1,4 +1,4 @@
 pub mod linked;
-pub mod set;
+pub mod map;
 
 pub use linked::ClashMap;

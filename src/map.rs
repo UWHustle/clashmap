@@ -6,117 +6,125 @@ use std::borrow::Borrow;
 use std::sync::RwLockReadGuard;
 use owning_ref::{OwningHandle, OwningRef};
 use std::ops::Deref;
+use std::fmt::{Debug, Error, Formatter};
 
 const MAX_LOAD_NUM: usize = 1;
 const MAX_LOAD_DEN: usize = 2;
 
-pub struct ValueGuard<'a, T: 'a>(
-    OwningRef<OwningHandle<RwLockReadGuard<'a, Table<T>>, RwLockReadGuard<'a, Bucket<T>>>, T>
+pub struct ValueGuard<'a, K, V: 'a>(
+    OwningRef<OwningHandle<RwLockReadGuard<'a, Table<K, V>>, RwLockReadGuard<'a, Option<Bucket<K, V>>>>, V>
 );
 
-pub struct Bucket<T> {
-    value: Option<T>
+pub struct Bucket<K, V> {
+    key: K,
+    value: V
 }
 
-struct Table<T> {
+struct Table<K, V> {
     hash_builder: RandomState,
-    buckets: Vec<RwLock<Bucket<T>>>
+    buckets: Vec<RwLock<Option<Bucket<K, V>>>>
 }
 
-pub struct ConcurrentHashSet<T> {
-    table: RwLock<Table<T>>,
+pub struct ConcurrentHashMap<K, V> {
+    table: RwLock<Table<K, V>>,
     size: AtomicUsize,
 }
 
-impl<'a, T> Deref for ValueGuard<'a, T> {
-    type Target = T;
+impl<'a, K, V: Debug> Debug for ValueGuard<'a, K, V> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        self.0.fmt(f)
+    }
+}
 
-    fn deref(&self) -> &T {
+impl<'a, K, V> Deref for ValueGuard<'a, K, V> {
+    type Target = V;
+
+    fn deref(&self) -> &V {
         &self.0
     }
 }
 
-impl<'a, T: PartialEq> PartialEq for ValueGuard<'a, T> {
-    fn eq(&self, other: &ValueGuard<'a, T>) -> bool {
-        self == other
+impl<'a, K, V> PartialEq<V> for ValueGuard<'a, K, V>
+    where V: Eq
+{
+    fn eq(&self, other: &V) -> bool {
+        other.eq(self)
     }
 }
 
-impl<'a, T: Eq> Eq for ValueGuard<'a, T> {}
-
-impl<T> Bucket<T> {
-    fn new() -> Self {
+impl<K, V> Bucket<K, V> {
+    fn new(key: K, value: V) -> Self {
         Bucket {
-            value: None
+            key,
+            value
         }
     }
 }
 
-impl<T> Table<T> {
+impl<K, V> Table<K, V> {
     fn with_capacity(capacity: usize) -> Self {
         Table {
             hash_builder: RandomState::new(),
-            buckets: (0..capacity).map(|_| RwLock::new(Bucket::new())).collect()
+            buckets: (0..capacity).map(|_| RwLock::new(None)).collect()
         }
     }
 
-    fn find<Q: ?Sized>(&self, value: &Q) -> (usize, &RwLock<Bucket<T>>)
-        where T: Borrow<Q>,
+    fn find<Q: ?Sized>(&self, key: &Q) -> (usize, &RwLock<Option<Bucket<K, V>>>)
+        where K: Borrow<Q>,
               Q: Hash + Eq
     {
-        let hash = self.hash(value);
+        let hash = self.hash(key);
         let mut i = hash % self.buckets.len();
         loop {
             let bucket = &self.buckets[i];
             let bucket_guard = self.buckets[i].read().unwrap();
-            if bucket_guard.value.is_none() || value.eq(bucket_guard.value.as_ref().unwrap().borrow()) {
+            if bucket_guard.is_none() || key.eq(bucket_guard.as_ref().unwrap().key.borrow()) {
                 break (i, bucket);
             }
             i = (i + 1) % self.buckets.len();
         }
     }
 
-    fn take_shift<Q: ?Sized>(&self, value: &Q) -> Option<T>
-        where T: Borrow<Q>,
+    fn take_shift<Q: ?Sized>(&self, key: &Q) -> Option<Bucket<K, V>>
+        where K: Borrow<Q>,
               Q: Hash + Eq
     {
-        let (i, bucket_lock) = self.find(value);
+        let (i, bucket_lock) = self.find(key);
         let mut bucket_guard = bucket_lock.write().unwrap();
 
-
-        bucket_guard.value.take().map(|value| {
+        bucket_guard.take().map(|bucket| {
             let mut swap_index = i;
-            while self.buckets[(swap_index + 1) % self.buckets.len()].read().unwrap().value.is_some() {
+            while self.buckets[(swap_index + 1) % self.buckets.len()].read().unwrap().is_some() {
                 swap_index += 1;
             }
 
             if swap_index != i {
                 let mut swap_bucket_guard = self.buckets[swap_index % self.buckets.len()].write().unwrap();
-                mem::swap(&mut bucket_guard.value, &mut swap_bucket_guard.value);
+                mem::swap(&mut bucket_guard, &mut swap_bucket_guard);
             }
-            value
+            bucket
         })
     }
 
-    fn hash<Q: ?Sized>(&self, value: &Q) -> usize
-        where T: Borrow<Q>,
+    fn hash<Q: ?Sized>(&self, key: &Q) -> usize
+        where K: Borrow<Q>,
               Q: Hash
     {
         let mut state = self.hash_builder.build_hasher();
-        value.hash(&mut state);
+        key.hash(&mut state);
         state.finish() as usize
     }
 }
 
-impl<T> ConcurrentHashSet<T>
-    where T: Eq + Hash
+impl<K, V> ConcurrentHashMap<K, V>
+    where K: Eq + Hash
 {
     pub fn new() -> Self {
         Self::with_capacity(0)
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
-        ConcurrentHashSet {
+        ConcurrentHashMap {
             table: RwLock::new(Table::with_capacity(capacity * MAX_LOAD_DEN / MAX_LOAD_NUM)),
             size: AtomicUsize::new(0)
         }
@@ -147,63 +155,52 @@ impl<T> ConcurrentHashSet<T>
         self.size.store(0, Ordering::Relaxed);
     }
 
-    pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<ValueGuard<T>>
-        where T: Borrow<Q>,
+    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<ValueGuard<K, V>>
+        where K: Borrow<Q>,
               Q: Hash + Eq
     {
         let bucket_handle = OwningHandle::new_with_fn(
             self.table.read().unwrap(),
-            |t| unsafe {&*t}.find(value).1.read().unwrap());
+            |t| unsafe {&*t}.find(key).1.read().unwrap());
 
-        match (*bucket_handle).value {
-            Some(_) => Some(ValueGuard(OwningRef::new(bucket_handle).map(|b| b.value.as_ref().unwrap()))),
+        match &*bucket_handle {
+            Some(_) => Some(ValueGuard(OwningRef::new(bucket_handle).map(|b| &b.as_ref().unwrap().value))),
             None => None
         }
     }
 
-    pub fn insert(&self, value: T) -> bool
-        where T: Hash + Eq
-    {
-        self.replace(value).is_none()
-    }
-
-    pub fn replace(&self, value: T) -> Option<T>
-        where T: Hash + Eq
+    pub fn insert(&self, key: K, value: V) -> Option<V>
+        where K: Hash + Eq
     {
         self.reserve(1);
         let table_guard = self.table.read().unwrap();
-        let mut bucket_guard = table_guard.find(&value).1.write().unwrap();
-        let replaced_value = bucket_guard.value.replace(value);
-        if replaced_value.is_none() {
-            self.size.fetch_add(1, Ordering::Relaxed);
-        }
-        replaced_value
+        let mut bucket_guard = table_guard.find(&key).1.write().unwrap();
+        let replaced_bucket = bucket_guard.replace(Bucket::new(key, value));
+        replaced_bucket
+            .map(|b| b.value)
+            .or_else(|| {
+                self.size.fetch_add(1, Ordering::Relaxed);
+                None
+            })
     }
 
-    pub fn remove<Q: ?Sized>(&self, value: &Q) -> bool
-        where T: Borrow<Q>,
+    pub fn remove<Q: ?Sized>(&self, value: &Q) -> Option<V>
+        where K: Borrow<Q>,
               Q: Hash + Eq
     {
-        self.take(value).is_some()
-    }
-
-    pub fn take<Q: ?Sized>(&self, value: &Q) -> Option<T>
-        where T: Borrow<Q>,
-              Q: Hash + Eq
-    {
-        self.table.read().unwrap().take_shift(value)
+        self.table.read().unwrap().take_shift(value).map(|b| b.value)
     }
 
     fn resize(&self, new_raw_capacity: usize)
-        where T: Hash
+        where K: Hash
     {
         let mut table_guard = self.table.write().unwrap();
         if table_guard.buckets.len() < new_raw_capacity {
             let old_table = mem::replace(&mut *table_guard, Table::with_capacity(new_raw_capacity));
             for bucket in old_table.buckets {
-                if let Some(value) = bucket.into_inner().unwrap().value {
-                    let mut bucket_guard = table_guard.find(&value).1.write().unwrap();
-                    bucket_guard.value.replace(value);
+                if let Some(b) = bucket.into_inner().unwrap().take() {
+                    let mut bucket_guard = table_guard.find(&b.key).1.write().unwrap();
+                    bucket_guard.replace(b);
                 }
             }
         }
