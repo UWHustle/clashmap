@@ -95,6 +95,13 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         self.hash_set.get(Key::from_ref(k)).map(|node| &node.value)
     }
 
+    pub fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
+        where K: Borrow<Q>,
+              Q: Hash + Eq
+    {
+        self.hash_set.contains(Key::from_ref(k))
+    }
+
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         let mut node = Box::new(Node::new(k, v));
         let raw_node: *mut _ = &mut *node;

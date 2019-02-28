@@ -51,6 +51,14 @@ mod tests {
     }
 
     #[test]
+    fn contains_key() {
+        let mut map = OrderedHashMap::new();
+        map.insert(1, "a");
+        assert_eq!(map.contains_key(&1), true);
+        assert_eq!(map.contains_key(&2), false);
+    }
+
+    #[test]
     fn insert() {
         let mut map = OrderedHashMap::new();
         assert_eq!(map.insert(37, "a"), None);
