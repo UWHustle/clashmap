@@ -102,7 +102,7 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         self.hash_set.contains(Key::from_ref(k))
     }
 
-    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+    pub fn insert_back(&mut self, k: K, v: V) -> Option<V> {
         let mut node = Box::new(Node::new(k, v));
         let raw_node: *mut _ = &mut *node;
         if self.tail.is_null() {
@@ -113,6 +113,22 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
                 node.prev = self.tail;
                 (*self.tail).next = raw_node;
                 self.tail = raw_node
+            };
+        }
+        self.hash_set.replace(node).map(|node| node.value)
+    }
+
+    pub fn insert_front(&mut self, k: K, v: V) -> Option<V> {
+        let mut node = Box::new(Node::new(k, v));
+        let raw_node: *mut _ = &mut *node;
+        if self.head.is_null() {
+            self.head = raw_node;
+            self.tail = raw_node;
+        } else {
+            unsafe {
+                node.next = self.head;
+                (*self.head).prev = raw_node;
+                self.head = raw_node;
             };
         }
         self.hash_set.replace(node).map(|node| node.value)
