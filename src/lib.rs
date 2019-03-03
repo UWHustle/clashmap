@@ -95,6 +95,19 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         self.hash_set.get(Key::from_ref(k)).map(|node| &node.value)
     }
 
+    pub fn next<Q: ?Sized>(&self, k: &Q) -> Option<(&K, &V)>
+        where K: Borrow<Q>,
+              Q: Eq + Hash
+    {
+        self.hash_set.get(Key::from_ref(k)).and_then(|node| {
+            if node.next.is_null() {
+                None
+            } else {
+                unsafe { Some((&(*node.next).key, &(*node.next).value)) }
+            }
+        })
+    }
+
     pub fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
         where K: Borrow<Q>,
               Q: Hash + Eq
