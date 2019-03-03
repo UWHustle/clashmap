@@ -108,6 +108,14 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         })
     }
 
+    pub fn first(&self) -> Option<(&K, &V)> {
+        if self.head.is_null() {
+            None
+        } else {
+            unsafe { Some((&(*self.head).key, &(*self.head).value)) }
+        }
+    }
+
     pub fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
         where K: Borrow<Q>,
               Q: Hash + Eq
