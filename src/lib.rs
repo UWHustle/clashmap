@@ -116,6 +116,14 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         }
     }
 
+    pub fn last(&self) -> Option<(&K, &V)> {
+        if self.tail.is_null() {
+            None
+        } else {
+            unsafe { Some((&(*self.tail).key, &(*self.tail).value)) }
+        }
+    }
+
     pub fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
         where K: Borrow<Q>,
               Q: Hash + Eq
@@ -123,23 +131,7 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         self.hash_set.contains(Key::from_ref(k))
     }
 
-    pub fn insert_back(&mut self, k: K, v: V) -> Option<V> {
-        let mut node = Box::new(Node::new(k, v));
-        let raw_node: *mut _ = &mut *node;
-        if self.tail.is_null() {
-            self.head = raw_node;
-            self.tail = raw_node;
-        } else {
-            unsafe {
-                node.prev = self.tail;
-                (*self.tail).next = raw_node;
-                self.tail = raw_node
-            };
-        }
-        self.hash_set.replace(node).map(|node| node.value)
-    }
-
-    pub fn insert_front(&mut self, k: K, v: V) -> Option<V> {
+    pub fn push_front(&mut self, k: K, v: V) -> Option<V> {
         let mut node = Box::new(Node::new(k, v));
         let raw_node: *mut _ = &mut *node;
         if self.head.is_null() {
@@ -155,7 +147,46 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
         self.hash_set.replace(node).map(|node| node.value)
     }
 
+    pub fn push_back(&mut self, k: K, v: V) -> Option<V> {
+        let mut node = Box::new(Node::new(k, v));
+        let raw_node: *mut _ = &mut *node;
+        if self.tail.is_null() {
+            self.head = raw_node;
+            self.tail = raw_node;
+        } else {
+            unsafe {
+                node.prev = self.tail;
+                (*self.tail).next = raw_node;
+                self.tail = raw_node
+            };
+        }
+        self.hash_set.replace(node).map(|node| node.value)
+    }
+
     pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+        where K: Borrow<Q>,
+              Q: Eq + Hash
+    {
+        self.remove_entry(k).map(|(_k, v)| v)
+    }
+
+    pub fn pop_front(&mut self) -> Option<(K, V)> {
+        if self.head.is_null() {
+            None
+        } else {
+            self.remove_entry(unsafe { &(*self.head).key })
+        }
+    }
+
+    pub fn pop_back(&mut self) -> Option<(K, V)> {
+        if self.tail.is_null() {
+            None
+        } else {
+            self.remove_entry(unsafe { &(*self.tail).key })
+        }
+    }
+
+    pub fn remove_entry<Q: ?Sized>(&mut self, k: &Q) -> Option<(K, V)>
         where K: Borrow<Q>,
               Q: Eq + Hash
     {
@@ -176,7 +207,7 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
                 }
             }
 
-            node.value
+            (node.key, node.value)
         })
     }
 }
