@@ -212,6 +212,10 @@ impl<K: Hash + Eq, V> OrderedHashMap<K, V> {
     }
 }
 
+unsafe impl<K: Send, V: Send> Send for OrderedHashMap<K, V> {}
+
+unsafe impl<K: Sync, V: Sync> Sync for OrderedHashMap<K, V> {}
+
 impl<'a, K, V, Q: ?Sized> Index<&'a Q> for OrderedHashMap<K, V>
     where K: Eq + Hash + Borrow<Q>,
           Q: Eq + Hash
